@@ -171,7 +171,7 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
-  test("BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it", async () => {
+  test("limit.input counts only input tokens — output tokens do not consume input window", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -180,15 +180,18 @@ describe("session.compaction.isOverflow", () => {
         const withInputLimit = createModel({ context: 200_000, input: 200_000, output: 32_000 })
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
 
-        // 170K total tokens — well above context-output (168K) but below input limit (200K)
+        // 171K input tokens (166K + 5K cache), 10K output → 181K total
         const tokens = { input: 166_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
         const withLimit = await SessionCompaction.isOverflow({ tokens, model: withInputLimit })
         const withoutLimit = await SessionCompaction.isOverflow({ tokens, model: withoutInputLimit })
 
-        // Both models have identical real capacity — they should agree:
-        expect(withLimit).toBe(true) // should compact (170K leaves no room for 32K output)
-        expect(withoutLimit).toBe(true) // correctly compacts (170K > 168K)
+        // With limit.input: only input tokens (171K) are counted against limit (200K - 20K = 180K)
+        // 171K < 180K → no compaction needed yet
+        expect(withLimit).toBe(false)
+        // Without limit.input: total tokens (181K) are counted against context - output (200K - 32K = 168K)
+        // 181K > 168K → compaction triggered
+        expect(withoutLimit).toBe(true)
       },
     })
   })
