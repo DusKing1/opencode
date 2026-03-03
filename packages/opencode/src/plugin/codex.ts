@@ -623,6 +623,10 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
+      const residency = input.provider?.options?.enforce_residency
+      if (residency) {
+        output.headers["x-openai-internal-codex-residency"] = residency
+      }
     },
   }
 }
